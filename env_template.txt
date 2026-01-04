@@ -1,0 +1,32 @@
+# ===========================================
+# Social Media Weekly Report Generator
+# Copy this file to .env and fill in your credentials
+# ===========================================
+
+# --- Meta (Facebook & Instagram) ---
+# Get these from Meta for Developers: https://developers.facebook.com/
+META_ACCESS_TOKEN=your_meta_access_token_here
+FACEBOOK_PAGE_ID=your_facebook_page_id_here
+# INSTAGRAM_ACCOUNT_ID=your_instagram_business_account_id_here  # Uncomment when ready
+
+# --- X (Twitter) --- [DISABLED FOR NOW]
+# Get these from Twitter Developer Portal: https://developer.twitter.com/
+# TWITTER_API_KEY=your_twitter_api_key_here
+# TWITTER_API_SECRET=your_twitter_api_secret_here
+# TWITTER_ACCESS_TOKEN=your_twitter_access_token_here
+# TWITTER_ACCESS_SECRET=your_twitter_access_secret_here
+# TWITTER_BEARER_TOKEN=your_twitter_bearer_token_here
+# TWITTER_USER_ID=your_twitter_user_id_here
+
+# --- Google Sheets ---
+# Get these from Google Cloud Console: https://console.cloud.google.com/
+GOOGLE_SHEET_ID=your_google_spreadsheet_id_here
+GOOGLE_CREDENTIALS_PATH=credentials/google_service_account.json
+
+# --- Optional Settings ---
+# Default number of days to look back
+DEFAULT_DAYS_LOOKBACK=7
+
+# Sheet name within the spreadsheet (default: Sheet1)
+GOOGLE_SHEET_NAME=Sheet1
+
