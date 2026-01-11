@@ -35,7 +35,6 @@ class SheetRow:
     likes: int = 0
     comments: int = 0
     shares: int = 0
-    notes: str = ""
 
 
 class GoogleSheetsClient:
@@ -45,7 +44,7 @@ class GoogleSheetsClient:
     EXPECTED_HEADERS = [
         "Date", "Time", "Platform", "Post URL", "Caption",
         "Views", "Interactions", "Reach", "Follows", "Link Clicks",
-        "Likes", "Comments", "Shares", "Notes"
+        "Likes", "Comments", "Shares"
     ]
     
     # Column indices (0-based)
@@ -62,7 +61,6 @@ class GoogleSheetsClient:
     COL_LIKES = 10
     COL_COMMENTS = 11
     COL_SHARES = 12
-    COL_NOTES = 13
     
     def __init__(self, credentials_path: str, spreadsheet_id: str, sheet_name: str = "Sheet1"):
         """
@@ -107,8 +105,8 @@ class GoogleSheetsClient:
         first_row = self._sheet.row_values(1)
         
         if not first_row or first_row != self.EXPECTED_HEADERS:
-            # Set headers (A1 to N1 for 14 columns)
-            self._sheet.update("A1:N1", [self.EXPECTED_HEADERS])
+            # Set headers (A1 to M1 for 13 columns)
+            self._sheet.update("A1:M1", [self.EXPECTED_HEADERS])
             print(f"Headers set: {self.EXPECTED_HEADERS}")
     
     def get_all_rows(self) -> list[SheetRow]:
@@ -152,7 +150,6 @@ class GoogleSheetsClient:
                     likes=safe_int(row[self.COL_LIKES]) if len(row) > self.COL_LIKES else 0,
                     comments=safe_int(row[self.COL_COMMENTS]) if len(row) > self.COL_COMMENTS else 0,
                     shares=safe_int(row[self.COL_SHARES]) if len(row) > self.COL_SHARES else 0,
-                    notes=row[self.COL_NOTES] if len(row) > self.COL_NOTES else "",
                 ))
         
         return rows
@@ -212,13 +209,12 @@ class GoogleSheetsClient:
         ]
         self._sheet.update(f"F{row_number}:M{row_number}", [values])
     
-    def add_post(self, metrics: PostMetrics, notes: str = "") -> int:
+    def add_post(self, metrics: PostMetrics) -> int:
         """
         Add a new post to the sheet.
         
         Args:
             metrics: PostMetrics object with post data
-            notes: Optional notes for the post
             
         Returns:
             Row number of the new row
@@ -243,7 +239,6 @@ class GoogleSheetsClient:
             metrics.likes,
             metrics.comments,
             metrics.shares,
-            notes,
         ]
         
         self._sheet.append_row(new_row)
@@ -251,13 +246,12 @@ class GoogleSheetsClient:
         # Return the new row number
         return len(self._sheet.get_all_values())
     
-    def update_or_add_post(self, metrics: PostMetrics, notes: str = "") -> tuple[str, int]:
+    def update_or_add_post(self, metrics: PostMetrics) -> tuple[str, int]:
         """
         Update existing post metrics or add new post if not found.
         
         Args:
             metrics: PostMetrics object with post data
-            notes: Optional notes for new posts
             
         Returns:
             Tuple of (action, row_number) where action is 'updated' or 'added'
@@ -265,14 +259,10 @@ class GoogleSheetsClient:
         existing_row = self.find_row_by_url(metrics.post_url)
         
         if existing_row:
-            self.update_row_metrics(
-                existing_row.row_number,
-                metrics.engagement,
-                metrics.reach
-            )
+            self.update_row_metrics(existing_row.row_number, metrics)
             return ("updated", existing_row.row_number)
         else:
-            row_number = self.add_post(metrics, notes)
+            row_number = self.add_post(metrics)
             return ("added", row_number)
     
     def batch_update_metrics(self, metrics_list: list[PostMetrics], dry_run: bool = False) -> dict:

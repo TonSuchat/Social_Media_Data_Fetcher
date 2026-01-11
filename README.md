@@ -202,14 +202,14 @@ To submit for App Review:
 
 Your Google Sheet will have these columns (auto-created):
 
-| Date       | Time  | Platform | Post URL    | Caption    | Views  | Interactions | Reach  | Follows | Link Clicks | Likes | Comments | Shares | Notes |
-| ---------- | ----- | -------- | ----------- | ---------- | ------ | ------------ | ------ | ------- | ----------- | ----- | -------- | ------ | ----- |
-| 2024-01-15 | 14:30 | Facebook | https://... | My post... | 15,068 | 92           | 10,029 | 20      | 5           | 81    | 1        | 19     |       |
+| Date       | Time  | Platform | Post URL    | Caption    | Views  | Interactions | Reach  | Follows | Link Clicks | Likes | Comments | Shares |
+| ---------- | ----- | -------- | ----------- | ---------- | ------ | ------------ | ------ | ------- | ----------- | ----- | -------- | ------ |
+| 2024-01-15 | 14:30 | Facebook | https://... | My post... | 15,068 | 92           | 10,029 | 0       | 5           | 81    | 1        | 19     |
 
 **Column Definitions:**
 
 - **Views** - Total impressions (how many times the post was shown)
-- **Interactions** - Total engagement (likes + comments + shares)
+- **Interactions** - Total engagement (reactions + comments + shares + link clicks)
 - **Reach** - Unique viewers (how many different people saw the post)
 - **Follows** - New followers gained from this post
 - **Link Clicks** - Number of clicks on links in the post

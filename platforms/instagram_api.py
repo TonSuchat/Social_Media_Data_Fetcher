@@ -19,7 +19,7 @@ BANGKOK_TZ = pytz.timezone('Asia/Bangkok')
 class InstagramAPI:
     """Client for Instagram Graph API to fetch business account post analytics."""
     
-    BASE_URL = "https://graph.facebook.com/v18.0"
+    BASE_URL = "https://graph.facebook.com/v24.0"
     
     def __init__(self, access_token: str, instagram_account_id: str):
         """

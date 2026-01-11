@@ -52,7 +52,7 @@ class PostMetrics:
 class FacebookAPI:
     """Client for Facebook Graph API to fetch page post analytics."""
     
-    BASE_URL = "https://graph.facebook.com/v18.0"
+    BASE_URL = "https://graph.facebook.com/v24.0"
     
     def __init__(self, access_token: str, page_id: str):
         """
@@ -119,135 +119,110 @@ class FacebookAPI:
         
         return posts[:limit]
     
-    def get_post_insights(self, post_id: str, try_insights: bool = False) -> dict:
+    def get_post_insights(self, post_id: str) -> dict:
         """
-        Fetch engagement metrics for a specific post.
+        Fetch engagement metrics for a specific post using Graph API v24.0.
         
-        NOTE: Full insights (views, reach, impressions) require the 'read_insights' 
-        permission which needs Facebook App Review approval.
+        Requires 'read_insights' permission.
         
-        With just 'pages_read_engagement', we can get: reactions, comments, shares.
+        Metrics used:
+        - post_impressions: Total views
+        - post_impressions_unique: Reach (unique viewers)  
+        - post_clicks_by_type: Link clicks breakdown
+        - post_reactions_by_type_total: Total reactions (likes, love, etc.)
+        
+        Note: 'follows' per post is NOT available - page_fan_adds is page-level only.
         
         Args:
             post_id: The Facebook post ID (format: {page_id}_{post_id})
-            try_insights: If True, attempt to fetch insights (requires read_insights permission)
             
         Returns:
             Dictionary with engagement metrics
         """
         # Initialize defaults
-        likes = 0
+        reactions = 0
         comments = 0
         shares = 0
         views = 0
         reach = 0
-        follows = 0
+        follows = 0  # Not available per-post in Facebook API
         link_clicks = 0
         
-        # Only try insights endpoint if explicitly requested AND user has read_insights permission
-        # Most users won't have this - it requires Facebook App Review
-        if try_insights:
-            try:
-                insights_data = self._make_request(
-                    f"{post_id}/insights",
-                    params={
-                        "metric": "post_impressions,post_impressions_unique,post_engaged_users,post_clicks"
-                    }
-                )
-                
-                for item in insights_data.get("data", []):
-                    metric_name = item.get("name")
-                    values = item.get("values", [{}])
-                    value = values[0].get("value", 0) if values else 0
-                    
-                    if metric_name == "post_impressions":
-                        views = value
-                    elif metric_name == "post_impressions_unique":
-                        reach = value
-                    elif metric_name == "post_clicks":
-                        link_clicks = value
-                        
-            except requests.HTTPError:
-                pass  # Silently skip - user doesn't have read_insights permission
-        
-        # Get engagement counts (reactions, comments, shares)
-        # Note: Page posts may require different query format
-        
-        # First try: query with just post ID (without page prefix) for reactions
-        # Sometimes the full pageId_postId format doesn't work for reactions edge
+        # Extract just the post ID part (after underscore)
+        # Sometimes need to query with just post ID, sometimes with full ID
         post_id_only = post_id.split("_")[-1] if "_" in post_id else post_id
         
-        # Try querying reactions using just the post object ID
+        # Fetch insights using valid metrics for API v24.0
+        # Metrics:
+        #   - post_media_view: Views
+        #   - post_impressions_unique: Reach (unique viewers)
+        #   - post_clicks_by_type: Click breakdown (link clicks, photo view, etc.)
+        #   - post_reactions_by_type_total: Reactions breakdown (like, love, haha, etc.)
+        #   - post_activity_by_action_type: Engagement breakdown (like, comment, share)
         try:
-            post_data = self._make_request(
-                post_id_only,
+            insights_data = self._make_request(
+                f"{post_id}/insights",
                 params={
-                    "fields": "shares,reactions.summary(total_count),comments.summary(total_count)"
+                    "metric": "post_media_view,post_impressions_unique,post_clicks_by_type,post_reactions_by_type_total,post_activity_by_action_type"
                 }
             )
             
             if self.debug:
-                print(f"\n🔍 DEBUG - API Response for {post_id_only}:")
-                print(f"   Raw data: {post_data}")
+                print(f"\n🔍 DEBUG - Insights for {post_id}:")
+                print(f"   Raw insights: {insights_data}")
             
-            likes = post_data.get("reactions", {}).get("summary", {}).get("total_count", 0)
-            comments = post_data.get("comments", {}).get("summary", {}).get("total_count", 0)
-            shares = post_data.get("shares", {}).get("count", 0)
-            
+            for item in insights_data.get("data", []):
+                metric_name = item.get("name")
+                values = item.get("values", [{}])
+                value = values[0].get("value", 0) if values else 0
+                
+                if metric_name == "post_media_view":
+                    views = value if isinstance(value, int) else 0
+                elif metric_name == "post_impressions_unique":
+                    reach = value if isinstance(value, int) else 0
+                elif metric_name == "post_clicks_by_type":
+                    # value is a dict like {"link clicks": 5, "other clicks": 10, "photo view": 4}
+                    if isinstance(value, dict):
+                        link_clicks = value.get("link clicks", 0)
+                        if self.debug:
+                            print(f"   post_clicks_by_type: {value}")
+                elif metric_name == "post_reactions_by_type_total":
+                    # value is a dict like {"like": 50, "love": 10, "haha": 5, ...}
+                    if isinstance(value, dict):
+                        reactions = sum(value.values())
+                        if self.debug:
+                            print(f"   post_reactions_by_type_total: {value}")
+                    else:
+                        reactions = value if isinstance(value, int) else 0
+                elif metric_name == "post_activity_by_action_type":
+                    # value is a dict like {"like": 49, "comment": 1, "share": 15}
+                    # This gives us comments and shares without needing pages_read_engagement!
+                    if isinstance(value, dict):
+                        comments = value.get("comment", 0)
+                        shares = value.get("share", 0)
+                        if self.debug:
+                            print(f"   post_activity_by_action_type: {value}")
+                        
         except requests.HTTPError as e:
             if self.debug:
-                print(f"\n🔍 DEBUG - Error for {post_id_only}: {e}")
-            
-            # Fallback: try with full post_id
-            try:
-                post_data = self._make_request(
-                    post_id,
-                    params={
-                        "fields": "shares,reactions.summary(total_count),comments.summary(total_count)"
-                    }
-                )
-                
-                if self.debug:
-                    print(f"\n🔍 DEBUG - API Response for {post_id}:")
-                    print(f"   Raw data: {post_data}")
-                
-                likes = post_data.get("reactions", {}).get("summary", {}).get("total_count", 0)
-                comments = post_data.get("comments", {}).get("summary", {}).get("total_count", 0)
-                shares = post_data.get("shares", {}).get("count", 0)
-                
-            except requests.HTTPError as e:
-                if self.debug:
-                    print(f"\n🔍 DEBUG - Error for {post_id}: {e}")
-                # Try likes edge instead
                 try:
-                    post_data = self._make_request(
-                        post_id,
-                        params={
-                            "fields": "shares,likes.summary(total_count),comments.summary(total_count)"
-                        }
-                    )
-                    
-                    likes = post_data.get("likes", {}).get("summary", {}).get("total_count", 0)
-                    comments = post_data.get("comments", {}).get("summary", {}).get("total_count", 0)
-                    shares = post_data.get("shares", {}).get("count", 0)
-                    
-                except requests.HTTPError:
-                    # Last resort: just get shares
-                    try:
-                        post_data = self._make_request(post_id, params={"fields": "shares"})
-                        shares = post_data.get("shares", {}).get("count", 0)
-                    except:
-                        pass
+                    error_detail = e.response.json() if e.response else {}
+                    print(f"\n🔍 DEBUG - Insights error for {post_id}: {error_detail}")
+                except:
+                    print(f"\n🔍 DEBUG - Insights error for {post_id}: {e}")
+        
+        # Interactions = total engagement (reactions + comments + shares + link clicks)
+        interactions = reactions + comments + shares + link_clicks
         
         return {
-            "likes": likes,
+            "likes": reactions,  # "likes" field now holds total reactions
             "comments": comments,
             "shares": shares,
             "views": views,
             "reach": reach,
             "follows": follows,
             "link_clicks": link_clicks,
-            "interactions": likes + comments + shares,
+            "interactions": interactions,
         }
     
     def get_posts_with_metrics(
@@ -257,6 +232,13 @@ class FacebookAPI:
     ) -> list[PostMetrics]:
         """
         Fetch all posts with their metrics for the specified time period.
+        
+        Uses read_insights permission to fetch:
+        - Views (post_impressions)
+        - Reach (post_impressions_unique)
+        - Link clicks (from post_clicks_by_type)
+        - Reactions (from post_reactions_by_type_total)
+        - Comments & Shares (from post object)
         
         Args:
             days: Number of days to look back (ignored if since is provided)
@@ -276,27 +258,16 @@ class FacebookAPI:
             created_time = date_parser.parse(post["created_time"]).astimezone(BANGKOK_TZ)
             caption = post.get("message", "")  # Post text/caption
             
-            # Extract engagement data from post
-            # Note: shares are always available
-            # likes/reactions/comments require App Review for 'pages_read_engagement'
-            shares = post.get("shares", {}).get("count", 0)
+            # Fetch all insights metrics (views, reach, reactions, link clicks, comments, shares)
+            # post_activity_by_action_type provides comments and shares!
+            metrics = self.get_post_insights(post_id)
             
-            # These require approved 'pages_read_engagement' permission (App Review)
-            likes = post.get("likes", {}).get("summary", {}).get("total_count", 0)
-            comments_count = post.get("comments", {}).get("summary", {}).get("total_count", 0)
+            # Fallback: use shares from post data if insights didn't return it
+            if metrics["shares"] == 0:
+                metrics["shares"] = post.get("shares", {}).get("count", 0)
             
-            # Debug output if enabled
             if self.debug:
-                print(f"\n🔍 DEBUG - Post {post_id}:")
-                print(f"   shares: {post.get('shares', {})}")
-                print(f"   (likes/comments require App Review)")
-            
-            # Calculate total interactions (only shares available without App Review)
-            interactions = likes + comments_count + shares
-            
-            # Views/Reach require read_insights permission (also needs App Review)
-            views = 0
-            reach = 0
+                print(f"\n🔍 DEBUG - Post {post_id} metrics: {metrics}")
             
             results.append(PostMetrics(
                 post_id=post_id,
@@ -304,14 +275,14 @@ class FacebookAPI:
                 platform="facebook",
                 created_time=created_time,
                 caption=caption,
-                views=views,
-                interactions=interactions,
-                reach=reach,
-                follows=0,  # Requires read_insights
-                link_clicks=0,  # Requires read_insights
-                likes=likes,
-                comments=comments_count,
-                shares=shares,
+                views=metrics["views"],
+                interactions=metrics["interactions"],
+                reach=metrics["reach"],
+                follows=metrics["follows"],  # Not available per-post
+                link_clicks=metrics["link_clicks"],
+                likes=metrics["likes"],  # Total reactions
+                comments=metrics["comments"],  # Requires pages_read_engagement
+                shares=metrics["shares"],
             ))
         
         return results
@@ -362,6 +333,7 @@ class FacebookAPI:
             created_time = date_parser.parse(post_data["created_time"]).astimezone(BANGKOK_TZ)
             caption = post_data.get("message", "")
             
+            # Fetch all metrics using insights API
             metrics = self.get_post_insights(post_id)
             
             return PostMetrics(
@@ -371,11 +343,11 @@ class FacebookAPI:
                 created_time=created_time,
                 caption=caption,
                 views=metrics["views"],
-                interactions=metrics["interactions"],
+                interactions=metrics["interactions"],  # reactions + link clicks
                 reach=metrics["reach"],
-                follows=metrics["follows"],
+                follows=metrics["follows"],  # Not available per-post
                 link_clicks=metrics["link_clicks"],
-                likes=metrics["likes"],
+                likes=metrics["likes"],  # Total reactions
                 comments=metrics["comments"],
                 shares=metrics["shares"],
             )
