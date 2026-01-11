@@ -18,8 +18,6 @@ Automatically fetch engagement and reach metrics from Facebook, Instagram, and X
 
 ```bash
 cd weekly_report_generator
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 

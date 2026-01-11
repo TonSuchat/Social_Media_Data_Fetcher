@@ -127,9 +127,9 @@ class InstagramAPI:
                 "video_views": insights.get("video_views", 0),
             }
             
-        except requests.HTTPError as e:
-            # Insights might not be available for all posts (e.g., promoted posts)
-            print(f"Warning: Could not fetch insights for media {media_id}: {e}")
+        except requests.HTTPError:
+            # Insights require 'instagram_manage_insights' permission (needs App Review)
+            # Silently return zeros - basic engagement (likes/comments) still works
             return {
                 "reach": 0,
                 "impressions": 0,
