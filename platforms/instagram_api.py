@@ -92,6 +92,16 @@ class InstagramAPI:
         """
         Fetch insights/analytics for a specific media post.
         
+        Requires 'instagram_manage_insights' permission.
+        
+        Metrics (API v24.0):
+        - views: Number of times content was played/displayed (replaces 'impressions')
+        - reach: Unique accounts that saw the post
+        - saved: Number of saves
+        - shares: Number of shares (stories/DMs)
+        - likes: Number of likes (from insights)
+        - comments: Number of comments (from insights)
+        
         Args:
             media_id: The Instagram media ID
             media_type: Type of media (IMAGE, VIDEO, CAROUSEL_ALBUM, REELS)
@@ -99,14 +109,8 @@ class InstagramAPI:
         Returns:
             Dictionary with engagement and reach metrics
         """
-        # Different media types support different metrics
-        # For images/carousels: impressions, reach, engagement
-        # For videos/reels: impressions, reach, video_views, saved
-        
-        if media_type in ["VIDEO", "REELS"]:
-            metrics = "impressions,reach,saved,video_views"
-        else:
-            metrics = "impressions,reach,saved"
+        # Use metrics for API v24.0 ('impressions' was deprecated in v22.0, use 'views')
+        metrics = "views,reach,saved,shares,likes,comments"
         
         try:
             insights_data = self._make_request(
@@ -121,20 +125,24 @@ class InstagramAPI:
                 insights[metric_name] = values[0].get("value", 0) if values else 0
             
             return {
-                "reach": insights.get("reach", 0),
-                "impressions": insights.get("impressions", 0),
-                "saved": insights.get("saved", 0),
-                "video_views": insights.get("video_views", 0),
+                "views": insights.get("views", 0),      # Views (replaces impressions)
+                "reach": insights.get("reach", 0),      # Reach
+                "saved": insights.get("saved", 0),      # Saves
+                "shares": insights.get("shares", 0),    # Shares
+                "likes": insights.get("likes", 0),      # Likes from insights
+                "comments": insights.get("comments", 0), # Comments from insights
             }
             
         except requests.HTTPError:
-            # Insights require 'instagram_manage_insights' permission (needs App Review)
-            # Silently return zeros - basic engagement (likes/comments) still works
+            # Insights require 'instagram_manage_insights' permission
+            # Silently return zeros - basic engagement (likes/comments) still works from post data
             return {
+                "views": 0,
                 "reach": 0,
-                "impressions": 0,
                 "saved": 0,
-                "video_views": 0,
+                "shares": 0,
+                "likes": 0,
+                "comments": 0,
             }
     
     def get_posts_with_metrics(
@@ -166,15 +174,23 @@ class InstagramAPI:
             created_time = date_parser.parse(post["timestamp"]).astimezone(BANGKOK_TZ)
             caption = post.get("caption", "")
             
-            # Get basic engagement from post data
-            likes = post.get("like_count", 0)
-            comments = post.get("comments_count", 0)
+            # Get basic engagement from post data (fallback)
+            likes_from_post = post.get("like_count", 0)
+            comments_from_post = post.get("comments_count", 0)
             
-            # Get detailed insights (may fail without instagram_manage_insights permission)
+            # Get detailed insights (requires instagram_manage_insights permission)
             insights = self.get_media_insights(media_id, media_type)
             
-            # Total interactions = likes + comments + saves
-            interactions = likes + comments + insights.get("saved", 0)
+            # Use insights data, fallback to post data if insights not available
+            views = insights.get("views", 0)
+            reach = insights.get("reach", 0)
+            saved = insights.get("saved", 0)
+            shares = insights.get("shares", 0)
+            likes = insights.get("likes", 0) or likes_from_post
+            comments = insights.get("comments", 0) or comments_from_post
+            
+            # Total interactions = likes + comments + shares + saved
+            interactions = likes + comments + shares + saved
             
             results.append(PostMetrics(
                 post_id=media_id,
@@ -182,14 +198,14 @@ class InstagramAPI:
                 platform="instagram",
                 created_time=created_time,
                 caption=caption,
-                views=insights.get("impressions", 0),  # impressions = views
-                interactions=interactions,
-                reach=insights.get("reach", 0),
-                follows=0,  # Not available per-post
-                link_clicks=0,  # Not available per-post
+                views=views,              # Views (from 'views' metric)
+                interactions=interactions, # likes + comments + shares + saved
+                reach=reach,              # Reach = unique viewers
+                follows=0,                # Not available per-post
+                link_clicks=0,            # Not available per-post
                 likes=likes,
                 comments=comments,
-                shares=0,  # Instagram doesn't expose share counts
+                shares=shares,
             ))
         
         return results
@@ -231,11 +247,17 @@ class InstagramAPI:
                 created_time = date_parser.parse(post["timestamp"]).astimezone(BANGKOK_TZ)
                 caption = post.get("caption", "")
                 
-                likes = post.get("like_count", 0)
-                comments = post.get("comments_count", 0)
+                likes_from_post = post.get("like_count", 0)
+                comments_from_post = post.get("comments_count", 0)
                 
                 insights = self.get_media_insights(media_id, media_type)
-                interactions = likes + comments + insights.get("saved", 0)
+                views = insights.get("views", 0)
+                reach = insights.get("reach", 0)
+                saved = insights.get("saved", 0)
+                shares = insights.get("shares", 0)
+                likes = insights.get("likes", 0) or likes_from_post
+                comments = insights.get("comments", 0) or comments_from_post
+                interactions = likes + comments + shares + saved
                 
                 return PostMetrics(
                     post_id=media_id,
@@ -243,14 +265,14 @@ class InstagramAPI:
                     platform="instagram",
                     created_time=created_time,
                     caption=caption,
-                    views=insights.get("impressions", 0),
+                    views=views,
                     interactions=interactions,
-                    reach=insights.get("reach", 0),
+                    reach=reach,
                     follows=0,
                     link_clicks=0,
                     likes=likes,
                     comments=comments,
-                    shares=0,
+                    shares=shares,
                 )
         
         return None
