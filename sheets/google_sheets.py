@@ -154,17 +154,18 @@ class GoogleSheetsClient:
         
         return rows
     
-    def find_row_by_url(self, post_url: str) -> Optional[SheetRow]:
+    def find_row_by_url(self, post_url: str, cached_rows: list[SheetRow] = None) -> Optional[SheetRow]:
         """
         Find a row by post URL.
         
         Args:
             post_url: The post URL to search for
+            cached_rows: Optional pre-fetched rows to avoid API call
             
         Returns:
             SheetRow if found, None otherwise
         """
-        rows = self.get_all_rows()
+        rows = cached_rows if cached_rows is not None else self.get_all_rows()
         
         # Normalize URLs for comparison
         normalized_target = self._normalize_url(post_url)
@@ -283,8 +284,11 @@ class GoogleSheetsClient:
             "details": [],
         }
         
+        # Fetch all rows once to avoid rate limiting (one read instead of N reads)
+        cached_rows = self.get_all_rows()
+        
         for metrics in metrics_list:
-            existing_row = self.find_row_by_url(metrics.post_url)
+            existing_row = self.find_row_by_url(metrics.post_url, cached_rows=cached_rows)
             
             if existing_row:
                 if dry_run:
